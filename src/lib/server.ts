@@ -1,5 +1,4 @@
-import {createClient} from '@supabase/supabase-js';
-import {cookies} from 'next/headers';
-export function client(token?:string){const url=process.env.NEXT_PUBLIC_SUPABASE_URL,key=process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;if(!url||!key)throw new Error('Supabase pendiente de configuración');return createClient(url,key,{auth:{persistSession:false,autoRefreshToken:false},global:token?{headers:{Authorization:`Bearer ${token}`}}:undefined});}
-export async function team(){const token=(await cookies()).get('mt-access')?.value;if(!token)throw new Error('Sesión requerida');const db=client(token);const {data,error}=await db.auth.getUser(token);if(error||!data.user)throw new Error('Sesión expirada');const member=await db.from('team_members').select('id').eq('id',data.user.id).maybeSingle();if(!member.data)throw new Error('Acceso restringido al equipo');return {db,user:data.user};}
+import {cookies} from 'next/headers';import {createHash} from 'node:crypto';import {database} from './database';
+export const tokenHash=(s:string)=>createHash('sha256').update(s).digest('hex');
+export async function team(allowChange=false){const token=(await cookies()).get('mt-session')?.value;if(!token)throw Error('Unauthorized');const {rows}=await database().query('select u.id,u.email,u.must_change_password from app_sessions s join app_users u on u.id=s.user_id where s.token_hash=$1 and s.expires_at>now() and u.active=true',[tokenHash(token)]);const user=rows[0];if(!user||(!allowChange&&user.must_change_password))throw Error('Unauthorized');return {user};}
 export function sameOrigin(req:Request){return req.headers.get('origin')===new URL(req.url).origin;}
