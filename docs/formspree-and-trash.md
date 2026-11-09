@@ -1,5 +1,7 @@
 # Formspree y papelera
 
+Destinatario autorizado: `jl.rangel@moldtech.mx`. Debe configurarse y verificarse en el dashboard de Formspree para el formulario `mwllgpag`. La variable INTERNAL_NOTIFICATION_EMAIL no cambia el destinatario del endpoint. No se ha verificado este ajuste en Formspree.
+
 Aplicar `supabase/upgrade-notifications.sql` después de `schema.sql` en la base independiente de Leads. No se aplicó a servicios externos durante el desarrollo.
 
 El servidor guarda primero el prospecto y luego llama mediante HTTPS POST al endpoint público https://formspree.io/f/mwllgpag. Se incluyen las 13 respuestas, detalles de Otro dentro de su respuesta, fecha, UUID, origen, asunto y email para Reply-To. Nunca se envía desde la demostración. No se envían correos al prospecto.
