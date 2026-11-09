@@ -1,0 +1,7 @@
+import test from 'node:test';import assert from 'node:assert/strict';import {notificationPayload,postNotification,endpoint} from '../src/lib/formspree.ts';
+const row={id:'fixture',created_at:'2026-11-09T12:00:00Z',answers:{fullName:'Persona DEMO',company:'Empresa DEMO',email:'demo@example.com',machineTypes:['Inyectoras','Otras'],machineTypesOther:'Robot'}};
+test('13 respuestas legibles más metadatos y reply-to',()=>{const p=notificationPayload(row);assert.equal(Object.keys(p).length,18);assert.equal(p['Tipo de máquinas que utilizan'],'Inyectoras, Otras · Robot');assert.equal(p.Puesto,'');assert.equal(p.email,'demo@example.com');});
+test('POST correcto y aceptación confirmada',async()=>{assert.equal(await postNotification(notificationPayload(row),async(url,init)=>{assert.equal(url,endpoint);assert.equal(init.method,'POST');return Response.json({ok:true});}),'sent');});
+test('rechazo explícito permite reintento',async()=>assert.equal(await postNotification({},async()=>new Response('',{status:422})),'pending'));
+test('error de red o servidor no implica rechazo seguro',async()=>{assert.equal(await postNotification({},async()=>{throw Error('network')}),'unknown');assert.equal(await postNotification({},async()=>new Response('',{status:500})),'unknown');});
+test('respuesta ambigua no se marca enviada',async()=>assert.equal(await postNotification({},async()=>Response.json({})),'unknown'));

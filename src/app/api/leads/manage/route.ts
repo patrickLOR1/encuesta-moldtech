@@ -1,0 +1,5 @@
+import {z} from 'zod';
+import {team,sameOrigin} from '@/lib/server';
+import {notify} from '@/lib/notify';
+const input=z.object({id:z.uuid(),action:z.enum(['trash','restore','notify'])});
+export async function POST(req:Request){if(!sameOrigin(req))return Response.json({error:'Origen no autorizado'},{status:403});try{const {db}=await team();const parsed=input.safeParse(await req.json());if(!parsed.success)return Response.json({error:'Solicitud inválida'},{status:400});const {id,action}=parsed.data;if(action==='notify'){await notify(db,id);}else{const result=await db.from('lead_records').update({deleted_at:action==='trash'?new Date().toISOString():null}).eq('id',id).select('id').single();if(result.error)throw result.error;}const {data,error}=await db.from('lead_records').select('*').eq('id',id).single();if(error)throw error;return Response.json(data,{headers:{'Cache-Control':'no-store'}});}catch{return Response.json({error:'No se pudo completar. Revisa tu sesión y vuelve a intentarlo.'},{status:503});}}

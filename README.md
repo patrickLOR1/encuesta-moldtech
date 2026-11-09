@@ -1,5 +1,7 @@
 # MoldTech Leads
 
+Actualización: Formspree interno y papelera recuperable están implementados en la rama `improve/plastimagen-audit`. Consulta [configuración y límites](docs/formspree-and-trash.md): sustituye las notas antiguas sobre correos por esta guía. Ejecutar también `supabase/upgrade-notifications.sql`. `FORMSPREE_ENABLED=false` evita envíos hasta autorización de prueba. Validación local: 15 pruebas aprobadas, build y lint. Persistencia externa, recepción real y QA de navegador siguen pendientes.
+
 Repositorio oficial independiente: https://github.com/patrickLOR1/encuesta-moldtech
 
 Next.js, React y TypeScript. Captura las 13 preguntas aprobadas en tres secciones. Sólo exige nombre, empresa y teléfono o correo válido. Incluye edición, ficha completa, seguimiento interno, búsqueda, filtros y CSV con protección contra fórmulas.
