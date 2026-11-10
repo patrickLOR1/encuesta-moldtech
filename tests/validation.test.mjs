@@ -1,14 +1,75 @@
-import test from 'node:test';
-import assert from 'node:assert/strict';
-import {leadSchema,csvCell,payloadSchema} from '../src/lib/validation.ts';
-const minimal={fullName:'Visitante ficticio',company:'DEMO',email:'demo@example.com'};
-test('only name company and one contact required',()=>assert.equal(leadSchema.safeParse(minimal).success,true));
-test('phone alone is accepted',()=>assert.equal(leadSchema.safeParse({...minimal,email:'',phone:'+52 55 1234 5678'}).success,true));
-test('missing contact and blank names rejected',()=>{for(const v of [{...minimal,email:''},{...minimal,fullName:' '},{...minimal,company:''}])assert.equal(leadSchema.safeParse(v).success,false)});
-test('invalid supplied contacts rejected',()=>{for(const v of [{...minimal,email:'bad'},{...minimal,phone:'abc'},{...minimal,phone:'123'}])assert.equal(leadSchema.safeParse(v).success,false)});
-test('machines require bounded nonnegative integer',()=>{for(const machineCount of ['-1','1.5','99999999999999'])assert.equal(leadSchema.safeParse({...minimal,machineCount}).success,false);assert.equal(leadSchema.safeParse({...minimal,machineCount:'0'}).success,true)});
-test('consent is false by default and never coerced',()=>{assert.equal(leadSchema.parse(minimal).consent,false);assert.equal(leadSchema.safeParse({...minimal,consent:'true'}).success,false)});
-test('unapproved options rejected',()=>assert.equal(leadSchema.safeParse({...minimal,machineTypes:['Unknown']}).success,false));
-test('other details and interest survive parsing',()=>{const v=leadSchema.parse({...minimal,machineTypes:['Otras'],machineTypesOther:'Robot',moldtechInterest:'Alertas'});assert.equal(v.machineTypesOther,'Robot');assert.equal(v.moldtechInterest,'Alertas')});
-test('CSV escapes spreadsheet formulas and quotes',()=>{assert.equal(csvCell('=1+1'),'"\'=1+1"');assert.equal(csvCell('a"b'),'"a""b"')});
-test('invalid identifiers rejected by server payload',()=>assert.equal(payloadSchema.safeParse({id:'bad',answers:minimal,tracking:{}}).success,false));
+import test from "node:test";
+import assert from "node:assert/strict";
+import { leadSchema, csvCell, payloadSchema } from "../src/lib/validation.ts";
+const minimal = {
+  fullName: "Visitante ficticio",
+  company: "DEMO",
+  email: "demo@example.com",
+};
+test("only name company and one contact required", () =>
+  assert.equal(leadSchema.safeParse(minimal).success, true));
+test("phone alone is accepted", () =>
+  assert.equal(
+    leadSchema.safeParse({ ...minimal, email: "", phone: "+52 55 1234 5678" })
+      .success,
+    true,
+  ));
+test("missing contact and blank names rejected", () => {
+  for (const v of [
+    { ...minimal, email: "" },
+    { ...minimal, fullName: " " },
+    { ...minimal, company: "" },
+  ])
+    assert.equal(leadSchema.safeParse(v).success, false);
+});
+test("invalid supplied contacts rejected", () => {
+  for (const v of [
+    { ...minimal, email: "bad" },
+    { ...minimal, phone: "abc" },
+    { ...minimal, phone: "123" },
+  ])
+    assert.equal(leadSchema.safeParse(v).success, false);
+});
+test("machines require bounded nonnegative integer", () => {
+  for (const machineCount of ["-1", "1.5", "99999999999999"])
+    assert.equal(
+      leadSchema.safeParse({ ...minimal, machineCount }).success,
+      false,
+    );
+  assert.equal(
+    leadSchema.safeParse({ ...minimal, machineCount: "0" }).success,
+    true,
+  );
+});
+test("consent is false by default and never coerced", () => {
+  assert.equal(leadSchema.parse(minimal).consent, false);
+  assert.equal(
+    leadSchema.safeParse({ ...minimal, consent: "true" }).success,
+    false,
+  );
+});
+test("unapproved options rejected", () =>
+  assert.equal(
+    leadSchema.safeParse({ ...minimal, machineTypes: ["Unknown"] }).success,
+    false,
+  ));
+test("other details and interest survive parsing", () => {
+  const v = leadSchema.parse({
+    ...minimal,
+    machineTypes: ["Otras"],
+    machineTypesOther: "Robot",
+    moldtechInterest: "Alertas",
+  });
+  assert.equal(v.machineTypesOther, "Robot");
+  assert.equal(v.moldtechInterest, "Alertas");
+});
+test("CSV escapes spreadsheet formulas and quotes", () => {
+  assert.equal(csvCell("=1+1"), '"\'=1+1"');
+  assert.equal(csvCell('a"b'), '"a""b"');
+});
+test("invalid identifiers rejected by server payload", () =>
+  assert.equal(
+    payloadSchema.safeParse({ id: "bad", answers: minimal, tracking: {} })
+      .success,
+    false,
+  ));

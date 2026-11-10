@@ -1,51 +1,62 @@
 # MoldTech Leads
 
-Actualización: Formspree interno y papelera recuperable están implementados en la rama `improve/plastimagen-audit`. Consulta [configuración y límites](docs/formspree-and-trash.md): sustituye las notas antiguas sobre correos por esta guía. Ejecutar también `supabase/upgrade-notifications.sql`. `FORMSPREE_ENABLED=false` evita envíos hasta autorización de prueba. Validación local: 15 pruebas aprobadas, build y lint. Persistencia externa, recepción real y QA de navegador siguen pendientes.
+Aplicación independiente del software industrial de MoldTech. Next.js, React, TypeScript y PostgreSQL Neon. Acceso privado para el equipo comercial; administrador autorizado: `jl.rangel@moldtech.mx`.
 
-Repositorio oficial independiente: https://github.com/patrickLOR1/encuesta-moldtech
+## Instalación
 
-Next.js, React y TypeScript. Captura las 13 preguntas aprobadas en tres secciones. Sólo exige nombre, empresa y teléfono o correo válido. Incluye edición, ficha completa, seguimiento interno, búsqueda, filtros y CSV con protección contra fórmulas.
+Requiere Node.js 24 y npm. Ejecutar `npm ci`. Copiar `.env.example` a `.env.local` y configurar los secretos privados fuera de Git. No usar credenciales expuestas anteriormente.
 
-## Instalación y ejecución
+- `npm run dev`: desarrollo.
+- `npm run build` y `npm start`: compilación y ejecución de producción.
+- `node --env-file=.env.local scripts/migrate.mjs`: migraciones versionadas, conexión directa con verificación TLS. Revisar destino, respaldo y diferencias antes de aplicarlas a producción. No ejecutar durante el build de Vercel.
+- `scripts/provision-admin.mjs`: aprovisionamiento seguro existente mediante entrada privada; bcrypt, nunca contraseña versionada. Los usuarios temporales deben cambiar contraseña y se revocan sus sesiones anteriores.
 
-Requiere Node.js 24 y npm.
+## Captura y calendario
+
+Exactamente 13 preguntas: las primeras 12 permanecen; la 13 captura fecha, hora y duración (30 minutos por defecto). Nombre, empresa y teléfono o correo son obligatorios. Reunión opcional; sin fecha se registra pendiente. Se conserva `demoInterest` histórico sin inventar fechas.
+
+Prospecto y reunión se guardan en una transacción. PostgreSQL impide horarios superpuestos del mismo responsable, incluso con solicitudes simultáneas. Los instantes se guardan como `timestamptz` y se muestran en `America/Mexico_City`. La disponibilidad sugerida es interna, de 09:00 a 18:00, sin integración con Google Calendar.
+
+Calendario mensual/semanal/diario, búsqueda, responsable, estado, reprogramación y cancelación. Papelera recuperable para prospectos; no borra físicamente los datos. CSV protege contra fórmulas. No existe modo demostración ni contraseñas visibles.
+
+## Notificaciones independientes
+
+**Formspree:** `https://formspree.io/f/mwllgpag`. `FORMSPREE_ENABLED=true` solo después de comprobar en su panel el destinatario `jl.rangel@moldtech.mx`. Se notifica tras confirmar la transacción, fuera de la respuesta de captura. El prospecto permanece si falla. Rechazo explícito permite reintento; estado ambiguo requiere revisión. No se utiliza para ICS ni promociones automáticas.
+
+**SMTP:** configurar `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_APP_PASSWORD`, `SMTP_FROM` y `SMTP_ENABLED`. El remitente autorizado es `jl.rangel@moldtech.mx`. Los MX del dominio apuntan a Google; esto no confirma que la cuenta admita contraseñas de aplicación. Validar las políticas del administrador de Workspace y probar con destinatarios internos autorizados antes de habilitarlo. Nunca pegar secretos en el frontend, logs o Git.
+
+Nodemailer genera MIME e ical-generator genera iCalendar. UID estable, SEQUENCE incremental, REQUEST/CANCEL. Solo se encola invitación con correo válido y confirmación explícita. Outbox transaccional, reclamo exclusivo y reintentos manuales solo de fallos conocidos. Un timeout o envío interrumpido queda `unknown`; nunca se reenvía automáticamente. `sent` significa aceptación SMTP, no entrega final ni RSVP. No se afirma aceptación del invitado. Las notas internas no forman parte del mensaje.
+
+La cola se procesa después de guardar o actualizar una reunión. Si el proceso se interrumpe antes de tomar un mensaje pendiente, un operador puede usar el reintento desde la reunión; los resultados ambiguos requieren reconciliación con el proveedor. No hay un cron de producción configurado.
+
+## Seguridad y privacidad
+
+Cookies HttpOnly, Secure en producción, SameSite Strict; sesiones hash de tokens en Neon, ocho horas de expiración. Rutas administrativas autenticadas y mutaciones con validación de origen. Consultas SQL parametrizadas. Contraseñas bcrypt y cambio inicial obligatorio. No hay espera tras un error normal de contraseña: únicamente se limita un volumen superior a 30 intentos por minuto por identificador.
+
+El aviso jurídico sigue pendiente de aprobación: identidad legal, domicilio, finalidades, derechos ARCO, contacto y procedimiento de cambios. No publicar como aviso definitivo ni captar datos personales reales hasta aprobarlo. Consentimiento promocional opt-in separado de confirmación de reunión. No se envían promociones automáticas.
+
+## Pruebas aisladas
+
+La base de QA `moldtech_calendar_qa` vive en una rama Neon separada. No usar la base de producción para tests. `.env.qa.local` debe contener su URL privada y ambos envíos deshabilitados. El lanzador comprueba el nombre de base; usa `.next-qa` para separar artefactos.
 
 ```sh
 npm ci
-npm run dev
-```
-
-Abre http://localhost:3000. El botón «Explorar con datos ficticios» abre una demostración en memoria; recargar elimina sus cambios. Nunca introducir datos reales en la demostración. No hay contraseñas de demostración ni datos personales persistidos en el navegador.
-
-## Supabase independiente
-
-1. Crea un proyecto exclusivo para Leads; no uses la base industrial.
-2. Ejecuta `supabase/schema.sql` una vez en una base vacía. Habilita RLS y acceso sólo a miembros internos.
-3. Copia `.env.example` a `.env.local` y configura URL y publishable key. La aplicación no necesita una clave service-role para acceder a prospectos.
-4. Deshabilita el registro público en Supabase Auth. Crea las cuentas internas desde el panel y agrega cada UUID a `team_members` con su nombre mediante el SQL Editor administrativo.
-5. Inicia sesión con esa cuenta. El servidor verifica la identidad y membresía en cada petición. La cookie es HttpOnly, SameSite Strict y Secure en producción. La sesión expira según Supabase; vuelve a iniciar sesión cuando se solicite.
-
-La API valida nuevamente los datos y confirma la escritura antes de cerrar el formulario. UUID estable permite reintentar un guardado. Correo normalizado y teléfono sin separadores tienen restricciones únicas; los duplicados no se fusionan automáticamente. El listado tiene un límite de 5000 registros.
-
-## Pruebas
-
-```sh
-node --experimental-strip-types --test tests/validation.test.mjs
+npm test
 npm run lint
+npm run typecheck
 npm run build
-npm start
+npx playwright install chromium
+npm run dev:qa
+# En otra terminal:
+npm run test:e2e
 ```
 
-Verificado: build, TypeScript, ESLint y 10 pruebas unitarias de validación, consentimiento y CSV. Pendiente: pruebas de persistencia y RLS contra Supabase configurado y pruebas de navegador completas a 375/768/1440 px. El esquema no ha sido aplicado a ningún servicio externo.
+Playwright crea usuarios con contraseñas aleatorias y prospectos con dominios `.invalid`, solo en QA. Evidencias locales: `test-results/` y `playwright-report/` (ignorados por Git). No se altera la cuenta del administrador real. Las pruebas MIME/Formspree son simuladas; no demuestran entrega real.
 
-## Configuraciones pendientes
+## Preview y producción
 
-La entrega de correos y notificación a José Luis aún no está implementada; la interfaz indica que no fueron enviados. Las variables Resend documentan la integración prevista y no activan envíos. Se requiere verificar dominio, implementar outbox/idempotencia y estados de entrega, y obtener autorización para correos de prueba reales. Cualquier correo comercial debe exigir consentimiento explícito.
+Vercel: Next.js, raíz del repositorio, `npm ci`, `npm run build`, salida estándar sin `dist`. La rama `integrate/commercial-calendar` tiene variables de Preview específicas para QA. No mezclar esa URL con la base de producción.
 
-El aviso de privacidad requiere texto y URL aprobados antes de operar con personas reales. La identidad visual es provisional; el repositorio original estaba vacío y no contenía activos oficiales.
+La rama consolida el trabajo anterior de PR #1/#2/#3; no deben fusionarse como implementaciones independientes. Revisar un único diff acumulado hacia `main`. Producción requiere aprobar privacidad, SMTP/Formspree, pruebas reales autorizadas, respaldo y migraciones revisadas. No hacer merge ni promover este Preview sin cumplir esos requisitos.
 
-## Vercel
-
-No se realizó ningún despliegue. Tras completar aceptación y recibir autorización, importar este repositorio como proyecto Next.js, configurar variables y URL HTTPS de Supabase Auth, ejecutar build y desplegar. No publicar datos ni secretos en Git. `.env.local` está ignorado; `.env.example` no contiene credenciales.
-
-Rama de desarrollo: `develop/moldtech-leads`. El PR hacia `main` permanece en borrador mientras existan pendientes de aceptación.
+Ver `MOLDTECH_FINAL_QA_REPORT.md` para evidencia y pendientes. Los documentos antiguos de Supabase son históricos y no describen la integración vigente; esas dependencias ya no se utilizan.
