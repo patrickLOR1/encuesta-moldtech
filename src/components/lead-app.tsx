@@ -1,0 +1,656 @@
+"use client";
+import Image from "next/image";
+import { CommercialCalendar } from "./commercial-calendar";
+import { commercialMetrics } from "@/lib/metrics";
+import { useEffect, useState } from "react";
+import { ApprovedForm, Answers, questions, answerText } from "./approved-form";
+import { csvCell, trackingSchema } from "@/lib/validation";
+type Tracking = ReturnType<typeof trackingSchema.parse>;
+type RecordRow = {
+  id: string;
+  answers: Answers;
+  tracking: Tracking;
+  created_at: string;
+  created_by: string;
+  deleted_at?: string | null;
+  notification_status?: string;
+};
+const defaults = trackingSchema.parse({});
+async function api(path: string, body?: unknown, method?: string) {
+  const r = await fetch("/api/" + path, {
+    method: method || (body ? "POST" : "GET"),
+    headers: body ? { "Content-Type": "application/json" } : undefined,
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  const value = await r.json();
+  if (!r.ok) throw new Error(value.error || "Error de conexión");
+  return value;
+}
+export function LeadApp() {
+  const [now, setNow] = useState<Date | null>(null);
+  const [mode, M] = useState<"login" | "live">("login"),
+    [rows, R] = useState<RecordRow[]>([]),
+    [error, E] = useState(""),
+    [busy, B] = useState(false),
+    [changePassword, CP] = useState(false),
+    [editing, F] = useState<RecordRow | null>(null),
+    [detail, D] = useState<RecordRow | null>(null),
+    [query, Q] = useState(""),
+    [interest, J] = useState(""),
+    [action, A] = useState(""),
+    [rep, P] = useState(""),
+    [notice, N] = useState(""),
+    [from, From] = useState(""),
+    [to, To] = useState(""),
+    [trash, Trash] = useState(false);
+  useEffect(() => {
+    api("session")
+      .then(() => api("leads"))
+      .then((x) => {
+        setNow(new Date());
+        R(x);
+        M("live");
+      })
+      .catch(() => {});
+  }, []);
+  const save = async (row: RecordRow) => {
+    const stored = await api("leads", {
+      id: row.id,
+      answers: row.answers,
+      tracking: row.tracking,
+    });
+    R((old) => [stored, ...old.filter((x) => x.id !== stored.id)]);
+    return stored;
+  };
+  const metrics = commercialMetrics(rows, now || new Date(0));
+  const shown = rows.filter(
+    (r) =>
+      Boolean(r.deleted_at) === trash &&
+      `${r.answers.fullName} ${r.answers.company} ${r.answers.email || ""} ${r.answers.phone || ""}`
+        .toLowerCase()
+        .includes(query.toLowerCase()) &&
+      (!from || r.created_at.slice(0, 10) >= from) &&
+      (!to || r.created_at.slice(0, 10) <= to) &&
+      (!interest || r.tracking.interest === interest) &&
+      (!action || r.tracking.nextAction === action) &&
+      (!rep || r.created_by === rep),
+  );
+  const download = () => {
+    const data = [
+      [
+        ...questions.map((x) => x[1]),
+        "Otros tipos",
+        "Otro monitoreo",
+        "Otros problemas",
+        "Consentimiento",
+        "Estado",
+        "Notas",
+        "Próximo contacto",
+      ],
+      ...shown.map((r) => [
+        ...questions.map(([k]) => answerText(r.answers, k)),
+        r.answers.machineTypesOther,
+        r.answers.productionLogOther,
+        r.answers.problemsOther,
+        r.answers.consent ? "Sí" : "No",
+        r.tracking.status,
+        r.tracking.notes,
+        r.tracking.nextContact,
+      ]),
+    ];
+    const url = URL.createObjectURL(
+      new Blob(
+        ["\uFEFF" + data.map((r) => r.map(csvCell).join(",")).join("\r\n")],
+        { type: "text/csv;charset=utf-8" },
+      ),
+    );
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "moldtech-prospectos.csv";
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+  if (changePassword)
+    return (
+      <main className="loginbox">
+        <form
+          className="card"
+          onSubmit={async (e) => {
+            e.preventDefault();
+            B(true);
+            try {
+              await api(
+                "session",
+                { password: new FormData(e.currentTarget).get("password") },
+                "PATCH",
+              );
+              CP(false); M("login"); R([]); D(null); F(null);
+              E("Contraseña cambiada. Inicia sesión nuevamente.");
+            } catch (e) {
+              E((e as Error).message);
+            } finally {
+              B(false);
+            }
+          }}
+        >
+          <h2>Cambia tu contraseña temporal</h2>
+          <label>
+            Nueva contraseña
+            <input
+              className="field"
+              name="password"
+              type="password"
+              minLength={12}
+              required
+              autoComplete="new-password"
+            />
+          </label>
+          <p role="alert">{error}</p>
+          <button className="btn primary" disabled={busy}>
+            Cambiar contraseña
+          </button>
+        </form>
+      </main>
+    );
+  if (mode === "login")
+    return (
+      <main className="login">
+        <section className="art">
+          <div className="brand">
+            <Image
+              src="/moldtech-logo.jpg"
+              alt="MoldTech Solutions"
+              width={180}
+              height={180}
+            />
+          </div>
+          <h1>Cada conversación, una oportunidad.</h1>
+          <p>Captura y seguimiento para el equipo comercial.</p>
+        </section>
+        <section className="loginbox">
+          <form
+            className="card"
+            onSubmit={async (e) => {
+              e.preventDefault();
+              B(true);
+              E("");
+              const f = new FormData(e.currentTarget);
+              try {
+                const session = await api("session", {
+                  email: f.get("email"),
+                  password: f.get("password"),
+                });
+                if (session.must_change_password) {
+                  CP(true);
+                  return;
+                }
+                R(await api("leads"));
+                setNow(new Date());
+                M("live");
+              } catch (e) {
+                E((e as Error).message);
+              } finally {
+                B(false);
+              }
+            }}
+          >
+            <div className="eyebrow">MoldTech Leads</div>
+            <h2>Acceso del equipo</h2>
+            <label>
+              Correo
+              <input
+                className="field"
+                name="email"
+                type="email"
+                autoComplete="username"
+                required
+              />
+            </label>
+            <label>
+              Contraseña
+              <input
+                className="field"
+                name="password"
+                type="password"
+                autoComplete="current-password"
+                required
+              />
+            </label>
+            <p role="alert">{error}</p>
+            <button className="btn primary" disabled={busy}>
+              {busy ? "Conectando…" : "Iniciar sesión"}
+            </button>
+          </form>
+        </section>
+      </main>
+    );
+  return (
+    <>
+      <header className="top">
+        <div className="brand">
+          <Image
+            src="/moldtech-logo.jpg"
+            alt="MoldTech"
+            width={60}
+            height={60}
+          />
+          <small>Leads</small>
+        </div>
+        <button className="btn ghost" onClick={()=>CP(true)}>Cambiar contraseña</button>
+<button
+          className="btn ghost"
+          onClick={async () => {
+            try {
+              if (mode === "live") await api("session", undefined, "DELETE");
+              R([]);
+              D(null);
+              F(null);
+              M("login");
+            } catch (e) {
+              E((e as Error).message);
+            }
+          }}
+        >
+          Cerrar sesión
+        </button>
+      </header>
+      <main className="wrap">
+        <section className="hero">
+          <div>
+            <div className="eyebrow">Panel comercial</div>
+            <h1>Conexiones que crecen.</h1>
+            <p>Captura rápida y seguimiento de prospectos.</p>
+          </div>
+          <button
+            className="btn primary"
+            onClick={() =>
+              F({
+                id: crypto.randomUUID(),
+                answers: {},
+                tracking: defaults,
+                created_at: new Date().toISOString(),
+                created_by: "Equipo",
+              })
+            }
+          >
+            + Nuevo prospecto
+          </button>
+        </section>
+        <section className="stats">
+          {[
+            ["Prospectos", metrics.total],
+            ["Interés alto", metrics.high],
+            ["Demos pendientes", metrics.demos],
+            ["Por contactar", metrics.contact],
+            ["Registrados hoy", metrics.today],
+          ].map(([l, n]) => (
+            <div className="stat" key={l}>
+              <strong>{n}</strong>
+              {l}
+            </div>
+          ))}
+        </section>
+        <p role="alert">{error}</p>
+        <p role="status">{notice}</p>
+        {notice && (
+          <button
+            className="btn primary"
+            onClick={() => {
+              N("");
+              F({
+                id: crypto.randomUUID(),
+                answers: {},
+                tracking: defaults,
+                created_at: new Date().toISOString(),
+                created_by: "Equipo",
+              });
+            }}
+          >
+            Registrar otro prospecto
+          </button>
+        )}
+        <section className="panel">
+          <div className="panelhead">
+            <h2>{trash ? "Papelera" : "Prospectos"}</h2>
+            <button className="btn ghost" onClick={() => Trash(!trash)}>
+              {trash ? "Ver activos" : "Ver papelera"}
+            </button>
+            <button className="btn ghost" onClick={download}>
+              Exportar CSV
+            </button>
+          </div>
+          <div className="tools" style={{ padding: 16 }}>
+            <label>
+              Desde
+              <input
+                className="field"
+                type="date"
+                value={from}
+                onChange={(e) => From(e.target.value)}
+              />
+            </label>
+            <label>
+              Hasta
+              <input
+                className="field"
+                type="date"
+                value={to}
+                onChange={(e) => To(e.target.value)}
+              />
+            </label>
+            <input
+              className="field"
+              aria-label="Buscar por nombre o empresa"
+              placeholder="Buscar nombre o empresa"
+              value={query}
+              onChange={(e) => Q(e.target.value)}
+            />
+            <select
+              aria-label="Filtrar interés"
+              className="field"
+              value={interest}
+              onChange={(e) => J(e.target.value)}
+            >
+              <option value="">Todos los intereses</option>
+              {["Alto", "Medio", "Bajo"].map((v) => (
+                <option key={v}>{v}</option>
+              ))}
+            </select>
+            <select
+              className="field"
+              aria-label="Filtrar siguiente acción"
+              value={action}
+              onChange={(e) => A(e.target.value)}
+            >
+              <option value="">Todas las acciones</option>
+              {Array.from(new Set(rows.map((r) => r.tracking.nextAction)))
+                .filter(Boolean)
+                .map((v) => (
+                  <option key={v}>{v}</option>
+                ))}
+            </select>
+            <select
+              className="field"
+              aria-label="Filtrar representante"
+              value={rep}
+              onChange={(e) => P(e.target.value)}
+            >
+              <option value="">Todos los representantes</option>
+              {Array.from(new Set(rows.map((r) => r.created_by))).map((v) => (
+                <option key={v}>{v}</option>
+              ))}
+            </select>
+          </div>
+          <div className="tablewrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Nombre</th>
+                  <th>Empresa</th>
+                  <th>Interés</th>
+                  <th>Estado</th>
+                  <th>Ficha</th>
+                </tr>
+              </thead>
+              <tbody>
+                {shown.map((r) => (
+                  <tr key={r.id}>
+                    <td>{String(r.answers.fullName)}</td>
+                    <td>{String(r.answers.company)}</td>
+                    <td>{r.tracking.interest || "Sin calificar"}</td>
+                    <td>{r.tracking.status}</td>
+                    <td>
+                      <button className="btn ghost" onClick={() => D(r)}>
+                        Ver ficha
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {!shown.length && (
+              <p className="empty">No hay prospectos con estos filtros.</p>
+            )}
+          </div>
+        </section>
+        <CommercialCalendar
+          now={now?.getTime() || 0}
+          key={rows.map((r) => r.id + r.created_at).join(",")}
+          openLead={(id) => {
+            api("leads")
+              .then((fresh) => {
+                R(fresh);
+                D(fresh.find((r: RecordRow) => r.id === id) || null);
+              })
+              .catch((e) => E(e.message));
+          }}
+        />
+      </main>
+      {editing && (
+        <ApprovedForm
+          initial={editing.answers}
+          close={() => F(null)}
+          save={async (answers) => {
+            const updated = await save({ ...editing, answers });
+            F(null);
+            if (detail?.id === updated.id) D(updated);
+            N(
+              updated.notification_status === "sent"
+                ? "Prospecto registrado correctamente."
+                : "Prospecto guardado. La notificación por correo está pendiente.",
+            );
+          }}
+        />
+      )}
+      {detail && !editing && (
+        <Detail
+          manage={async (action) => {
+            const updated = await api("leads/manage", {
+              id: detail.id,
+              action,
+            });
+            R((old) => old.map((r) => (r.id === updated.id ? updated : r)));
+            D(updated);
+          }}
+          row={detail}
+          close={() => D(null)}
+          edit={() => F(detail)}
+          save={async (tracking) => {
+            const updated = await save({ ...detail, tracking });
+            D(updated);
+          }}
+        />
+      )}
+    </>
+  );
+}
+function Detail({
+  row,
+  close,
+  edit,
+  save,
+  manage,
+}: {
+  manage: (action: string) => Promise<void>;
+  row: RecordRow;
+  close: () => void;
+  edit: () => void;
+  save: (t: Tracking) => Promise<void>;
+}) {
+  const [t, T] = useState(row.tracking),
+    [error, E] = useState(""),
+    [busy, B] = useState(false);
+  return (
+    <div className="overlay">
+      <section
+        className="modal"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Ficha del prospecto"
+      >
+        <div className="modalhead">
+          <h2>{String(row.answers.fullName)}</h2>
+          <button className="btn ghost" onClick={close}>
+            Cerrar
+          </button>
+        </div>
+        <div className="detail">
+          <button className="btn primary" onClick={edit}>
+            Editar las 13 respuestas
+          </button>
+          <dl className="detailgrid">
+            {questions.map(([k, l]) => (
+              <div className="item" key={k}>
+                <dt>{l}</dt>
+                <dd>
+                  {answerText(row.answers, k) || "Sin respuesta"}
+                  {row.answers[k + "Other"]
+                    ? " · " + String(row.answers[k + "Other"])
+                    : ""}
+                </dd>
+              </div>
+            ))}
+          </dl>
+          {row.answers.demoInterest && (
+            <p>
+              Respuesta histórica sobre demostración:{" "}
+              {String(row.answers.demoInterest)}
+            </p>
+          )}
+          <div className="divider" />
+          <h3>Seguimiento interno</h3>
+          <label>
+            Estado
+            <select
+              className="field"
+              value={t.status}
+              onChange={(e) =>
+                T({ ...t, status: e.target.value as Tracking["status"] })
+              }
+            >
+              {[
+                "Nuevo",
+                "Contactado",
+                "Demostración pendiente",
+                "Cotización enviada",
+                "En negociación",
+                "Cliente",
+                "No interesado",
+              ].map((v) => (
+                <option key={v}>{v}</option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Interés
+            <select
+              className="field"
+              value={t.interest}
+              onChange={(e) =>
+                T({ ...t, interest: e.target.value as Tracking["interest"] })
+              }
+            >
+              <option value="">Sin calificar</option>
+              {["Alto", "Medio", "Bajo"].map((v) => (
+                <option key={v}>{v}</option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Siguiente acción
+            <input
+              className="field"
+              value={t.nextAction}
+              onChange={(e) => T({ ...t, nextAction: e.target.value })}
+            />
+          </label>
+          <label>
+            Próximo contacto
+            <input
+              className="field"
+              type="date"
+              value={t.nextContact}
+              onChange={(e) => T({ ...t, nextContact: e.target.value })}
+            />
+          </label>
+          <label>
+            Notas de seguimiento
+            <textarea
+              className="field"
+              value={t.notes}
+              onChange={(e) => T({ ...t, notes: e.target.value })}
+            />
+          </label>
+          <p>
+            Comunicaciones comerciales:{" "}
+            {row.answers.consent ? "Autorizadas" : "Sin consentimiento"}
+          </p>
+          <p className="notice">
+            Notificación: {row.notification_status || "Pendiente"}
+          </p>
+          {row.notification_status === "pending" && !row.deleted_at && (
+            <button
+              className="btn ghost"
+              disabled={busy}
+              onClick={async () => {
+                B(true);
+                try {
+                  await manage("notify");
+                } catch (e) {
+                  E((e as Error).message);
+                } finally {
+                  B(false);
+                }
+              }}
+            >
+              Reintentar notificación
+            </button>
+          )}
+          <button
+            className="btn ghost"
+            disabled={busy}
+            onClick={async () => {
+              if (
+                !window.confirm(
+                  row.deleted_at
+                    ? "¿Restaurar este prospecto?"
+                    : "¿Mover este prospecto a la papelera? Podrás restaurarlo.",
+                )
+              )
+                return;
+              B(true);
+              try {
+                await manage(row.deleted_at ? "restore" : "trash");
+                close();
+              } catch (e) {
+                E((e as Error).message);
+              } finally {
+                B(false);
+              }
+            }}
+          >
+            {row.deleted_at ? "Restaurar prospecto" : "Quitar prospecto"}
+          </button>
+          <p role="alert">{error}</p>
+          <button
+            className="btn primary"
+            disabled={busy}
+            onClick={async () => {
+              B(true);
+              try {
+                await save(t);
+                E("Cambios guardados");
+              } catch (e) {
+                E((e as Error).message);
+              } finally {
+                B(false);
+              }
+            }}
+          >
+            {busy ? "Guardando…" : "Guardar seguimiento"}
+          </button>
+        </div>
+      </section>
+    </div>
+  );
+}
