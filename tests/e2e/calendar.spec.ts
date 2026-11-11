@@ -25,7 +25,12 @@ async function login(page: import("@playwright/test").Page) {
   await page.getByLabel("Correo", { exact: true }).fill(email);
   await page.getByLabel("Contraseña", { exact: true }).fill(password);
   await page.getByRole("button", { name: "Iniciar sesión" }).click();
-  try{await expect(page.getByText("Conexiones que crecen.")).toBeVisible();}catch(e){await page.getByLabel("Contraseña",{exact:true}).fill("");throw e;}
+  try {
+    await expect(page.getByText("Conexiones que crecen.")).toBeVisible();
+  } catch (e) {
+    await page.getByLabel("Contraseña", { exact: true }).fill("");
+    throw e;
+  }
 }
 test("login, capture, Neon persistence, edit, calendar, trash and restore", async ({
   page,
@@ -140,3 +145,72 @@ for (const width of [375, 390, 768, 1024, 1440])
       ),
     ).toBe(true);
   });
+
+test("browser validates contacts and past dates; search filters and CSV work", async ({
+  page,
+}) => {
+  await login(page);
+  const company = "Validación QA " + userId;
+  await page.getByRole("button", { name: "+ Nuevo prospecto" }).click();
+  await page.getByLabel("1. Nombre completo").fill("Validación QA");
+  await page.getByLabel("2. Empresa").fill(company);
+  await page.getByLabel("4. Teléfono").fill("abc");
+  await page.getByRole("button", { name: "Continuar" }).click();
+  await expect(
+    page.getByText("Teléfono inválido", { exact: true }),
+  ).toBeVisible();
+  await page.getByLabel("4. Teléfono").fill("");
+  await page.getByLabel("5. Correo electrónico").fill("incorrecto");
+  await page.getByRole("button", { name: "Continuar" }).click();
+  await expect(
+    page.getByText("Correo inválido", { exact: true }),
+  ).toBeVisible();
+  await page
+    .getByLabel("5. Correo electrónico")
+    .fill(`validation-${userId}@example.invalid`);
+  await page.getByRole("button", { name: "Continuar" }).click();
+  await page.getByRole("button", { name: "Continuar" }).click();
+  await page.getByLabel("Fecha", { exact: true }).fill("2000-01-01");
+  await page.getByLabel("Hora · Ciudad de México").fill("10:00");
+  await page.getByRole("button", { name: "Guardar prospecto" }).click();
+  await expect(
+    page.getByText("La reunión debe ser en el futuro.", { exact: true }),
+  ).toBeVisible();
+  await page.screenshot({ path: "test-results/past-date-error.png" });
+  await page.getByLabel("Fecha", { exact: true }).fill("");
+  await page.getByLabel("Hora · Ciudad de México").fill("");
+  await page.getByRole("button", { name: "Guardar prospecto" }).click();
+  await expect(
+    page.getByRole("button", { name: "Registrar otro prospecto" }),
+  ).toBeVisible();
+  await page.screenshot({ path: "test-results/save-confirmation.png" });
+  await page.getByLabel("Buscar por nombre o empresa").fill(company);
+  await expect(page.getByRole("row").filter({ hasText: company })).toHaveCount(
+    1,
+  );
+  await page
+    .getByRole("row")
+    .filter({ hasText: company })
+    .getByRole("button", { name: "Ver ficha" })
+    .click();
+  await page.getByLabel(/^Interés/).selectOption("Alto");
+  await page.getByRole("button", { name: "Guardar seguimiento" }).click();
+  await expect(
+    page.getByText("Cambios guardados", { exact: true }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Cerrar", exact: true }).click();
+  await page.getByLabel("Filtrar interés").selectOption("Bajo");
+  await expect(
+    page.getByText("No hay prospectos con estos filtros."),
+  ).toBeVisible();
+  await page.getByLabel("Filtrar interés").selectOption("Alto");
+  const downloadPromise = page.waitForEvent("download");
+  await page.getByRole("button", { name: "Exportar CSV" }).click();
+  const download = await downloadPromise;
+  const path = await download.path();
+  const { readFile } = await import("node:fs/promises");
+  const csv = await readFile(path!, "utf8");
+  expect(csv).toContain(company);
+  expect(csv).toContain("Fecha para la siguiente reunión");
+  expect(csv).not.toContain("¿Les gustaría agendar una demostración?");
+});

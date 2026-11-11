@@ -60,3 +60,13 @@ Vercel: Next.js, raíz del repositorio, `npm ci`, `npm run build`, salida están
 La rama consolida el trabajo anterior de PR #1/#2/#3; no deben fusionarse como implementaciones independientes. Revisar un único diff acumulado hacia `main`. Producción requiere aprobar privacidad, SMTP/Formspree, pruebas reales autorizadas, respaldo y migraciones revisadas. No hacer merge ni promover este Preview sin cumplir esos requisitos.
 
 Ver `MOLDTECH_FINAL_QA_REPORT.md` para evidencia y pendientes. Los documentos antiguos de Supabase son históricos y no describen la integración vigente; esas dependencias ya no se utilizan.
+
+## Gmail SMTP: preparación final
+
+Configuración prevista: `SMTP_HOST=smtp.gmail.com`, `SMTP_PORT=465`, `SMTP_SECURE=true`, `SMTP_USER=jl.rangel@moldtech.mx`, `SMTP_FROM=jl.rangel@moldtech.mx`, `SMTP_ENABLED=false`. `SMTP_APP_PASSWORD` permanece privada en Vercel. No exportarla para pruebas locales.
+
+`GET /api/integrations/status` requiere sesión y comprueba configuración sin conexión a Gmail ni envío; solo informa si existe la contraseña, jamás su valor. Node.js es obligatorio por Cache Components de esta versión de Next.js; no se declara Edge ni un `runtime` de ruta incompatible.
+
+Timeout de conexión y saludo: 10 segundos; inactividad SMTP: 20 segundos. Se cierra el transporte en `finally`. La cola conserva estados y evita el envío pendiente de prospectos archivados. Las pruebas `tests/e2e/smtp-worker.spec.ts` utilizan Neon QA real y un emisor SMTP simulado inyectado únicamente desde el test; no hay un endpoint de bypass o simulación en producción.
+
+Ver [procedimiento controlado](docs/gmail-controlled-test.md) y `MOLDTECH_SMTP_CALENDAR_QA.md`. La credencial previamente expuesta debe rotarse antes de utilizar prospectos reales. El cambio de variables Production no publica código ni actualiza un deployment ya construido.
