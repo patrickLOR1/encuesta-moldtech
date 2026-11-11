@@ -176,6 +176,7 @@ test("browser validates contacts and past dates; search filters and CSV work", a
   await expect(
     page.getByText("La reunión debe ser en el futuro.", { exact: true }),
   ).toBeVisible();
+  await page.getByText("La reunión debe ser en el futuro.", {exact:true}).scrollIntoViewIfNeeded();
   await page.screenshot({ path: "test-results/past-date-error.png" });
   await page.getByLabel("Fecha", { exact: true }).fill("");
   await page.getByLabel("Hora · Ciudad de México").fill("");
