@@ -2,7 +2,7 @@
 import Image from "next/image";
 import { CommercialCalendar } from "./commercial-calendar";
 import { commercialMetrics } from "@/lib/metrics";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import { ApprovedForm, Answers, questions, answerText } from "./approved-form";
 import { csvCell, trackingSchema } from "@/lib/validation";
 type Tracking = ReturnType<typeof trackingSchema.parse>;
@@ -26,7 +26,9 @@ async function api(path: string, body?: unknown, method?: string) {
   if (!r.ok) throw new Error(value.error || "Error de conexión");
   return value;
 }
+const subscribeHydration = () => () => {};
 export function LeadApp() {
+  const hydrated = useSyncExternalStore(subscribeHydration, () => true, () => false);
   const [now, setNow] = useState<Date | null>(null);
   const [mode, M] = useState<"login" | "live">("login"),
     [rows, R] = useState<RecordRow[]>([]),
@@ -107,13 +109,16 @@ export function LeadApp() {
     const a = document.createElement("a");
     a.href = url;
     a.download = "moldtech-prospectos.csv";
+    document.body.appendChild(a);
     a.click();
-    URL.revokeObjectURL(url);
+    a.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
   };
   if (changePassword)
     return (
       <main className="loginbox">
         <form
+          method="post" action="/api/session"
           className="card"
           onSubmit={async (e) => {
             e.preventDefault();
@@ -138,6 +143,7 @@ export function LeadApp() {
             Nueva contraseña
             <input
               className="field"
+              disabled={!hydrated}
               name="password"
               type="password"
               minLength={12}
@@ -146,7 +152,7 @@ export function LeadApp() {
             />
           </label>
           <p role="alert">{error}</p>
-          <button className="btn primary" disabled={busy}>
+          <button className="btn primary" disabled={busy || !hydrated}>
             Cambiar contraseña
           </button>
         </form>
@@ -169,6 +175,7 @@ export function LeadApp() {
         </section>
         <section className="loginbox">
           <form
+            method="post" action="/api/session"
             className="card"
             onSubmit={async (e) => {
               e.preventDefault();
@@ -200,6 +207,7 @@ export function LeadApp() {
               Correo
               <input
                 className="field"
+                disabled={!hydrated}
                 name="email"
                 type="email"
                 autoComplete="username"
@@ -210,14 +218,15 @@ export function LeadApp() {
               Contraseña
               <input
                 className="field"
-                name="password"
+                disabled={!hydrated}
+              name="password"
                 type="password"
                 autoComplete="current-password"
                 required
               />
             </label>
             <p role="alert">{error}</p>
-            <button className="btn primary" disabled={busy}>
+            <button className="btn primary" disabled={busy || !hydrated}>
               {busy ? "Conectando…" : "Iniciar sesión"}
             </button>
           </form>

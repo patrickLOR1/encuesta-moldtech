@@ -210,7 +210,11 @@ test("browser validates contacts and past dates; search filters and CSV work", a
   const download = await downloadPromise;
   const path = await download.path();
   const { readFile } = await import("node:fs/promises");
-  const csv = await readFile(path!, "utf8");
+  const bytes = await readFile(path!);
+  expect(download.suggestedFilename()).toBe("moldtech-prospectos.csv");
+  expect([...bytes.subarray(0, 3)]).toEqual([0xef, 0xbb, 0xbf]);
+  const csv = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+  expect(csv.split("\r\n")[0]).toContain('"Nombre completo"');
   expect(csv).toContain(company);
   expect(csv).toContain("Fecha para la siguiente reunión");
   expect(csv).not.toContain("¿Les gustaría agendar una demostración?");
