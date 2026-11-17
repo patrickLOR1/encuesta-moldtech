@@ -80,3 +80,7 @@ La comprobación autenticada confirmó configuración Gmail válida, presencia d
 Preview funcional para revisar captura y calendario; procedimiento de prueba controlada preparado en `docs/gmail-controlled-test.md`, pendiente de autorización. **Integración no aprobada para producción**: cuatro bloqueos abiertos, incluida la descarga CSV. No habilitar envíos automáticos a prospectos hasta cerrar las verificaciones anteriores.
 
 Referencias: [Gmail SMTP oficial](https://developers.google.com/workspace/gmail/imap/imap-smtp), [transporte y timeouts Nodemailer](https://nodemailer.com/smtp), [eventos iCalendar](https://nodemailer.com/message/calendar-events).
+
+## Revisión de cierre del 17 de noviembre
+
+El commit de aplicación cabe1b6 pasó 19 pruebas E2E/integración y 28 unitarias. Se verificó el envío seguro previo a hidratación, el CSV en tres navegadores y la apertura del archivo en Excel de escritorio. El Preview del commit pasó 15 comprobaciones con Neon QA y correo desactivado: https://encuesta-moldtech-gfnmpqp1k-patricklor1s-projects.vercel.app. El fallo histórico del CSV queda registrado arriba. Para el estado actualizado de producción, el respaldo y las autorizaciones pendientes, consultar MOLDTECH_RELEASE_READINESS.md.

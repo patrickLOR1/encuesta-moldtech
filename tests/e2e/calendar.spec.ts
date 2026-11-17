@@ -208,6 +208,7 @@ test("browser validates contacts and past dates; search filters and CSV work", a
   const downloadPromise = page.waitForEvent("download");
   await page.getByRole("button", { name: "Exportar CSV" }).click();
   const download = await downloadPromise;
+  await download.saveAs("test-results/qa-export.csv");
   const path = await download.path();
   const { readFile } = await import("node:fs/promises");
   const bytes = await readFile(path!);
